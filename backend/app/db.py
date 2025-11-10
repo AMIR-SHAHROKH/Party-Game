@@ -1,15 +1,16 @@
-from sqlmodel import SQLModel, create_engine
+# backend/app/db.py
+from sqlmodel import SQLModel, create_engine, Session
 import os
 
-DATABASE_URL = os.environ.get("DATABASE_URL","sqlite:///./db.sqlite3")
+# --- Database connection ---
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/postgres")
+engine = create_engine(DATABASE_URL, echo=True)
 
-_engine = None
-def get_engine():
-    global _engine
-    if _engine is None:
-        _engine = create_engine(DATABASE_URL, echo=False)
-    return _engine
+# --- Session factory ---
+def get_session():
+    with Session(engine) as session:
+        yield session
 
+# --- Create all tables ---
 def create_db_and_tables():
-    engine = get_engine()
     SQLModel.metadata.create_all(engine)
