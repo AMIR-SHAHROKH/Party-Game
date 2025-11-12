@@ -1,7 +1,6 @@
 fastapi
 uvicorn[standard]
-python-socketio==5.9.0
+python-socketio[asgi]
 sqlmodel
 psycopg2-binary
 python-dotenv
-requests

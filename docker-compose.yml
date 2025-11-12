@@ -1,35 +1,39 @@
-version: '3.8'
+version: "3.9"
+
 services:
   db:
-    image: postgres:15
+    image: postgres:15-alpine
+    container_name: qa_game_db
     environment:
-      POSTGRES_DB: game
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qa_game_backend
     environment:
-      DATABASE_URL: "postgresql://postgres:postgres@db:5432/game"
-      BACKEND_HOST: "0.0.0.0"
-      BACKEND_PORT: "8000"
-    ports:
-      - "8000:8000"
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
     depends_on:
       - db
+    ports:
+      - "8000:8000"
 
   frontend:
-    build: ./frontend
-    environment:
-      VITE_BACKEND_URL: "http://host.docker.internal:8000"
-    ports:
-      - "3000:3000"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: qa_game_frontend
     depends_on:
       - backend
+    ports:
+      - "5173:5173"
 
 volumes:
   postgres_data:

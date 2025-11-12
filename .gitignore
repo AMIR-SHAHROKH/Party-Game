@@ -11,3 +11,35 @@ venv/
 postgres_data/
 static_data/
 media_data/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+.env
+venv/
+.env/
+.idea/
+.vscode/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+postgres_data/
+static_data/
+media_data/
+*.json
