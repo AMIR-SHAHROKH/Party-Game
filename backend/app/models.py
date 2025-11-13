@@ -35,3 +35,6 @@ class Vote(SQLModel, table=True):
     submission_id: int
     voter_player_id: int
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class JoinGamePayload(BaseModel):
+    player_name: str

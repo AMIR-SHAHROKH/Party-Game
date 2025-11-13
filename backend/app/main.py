@@ -8,6 +8,7 @@ from .db import create_db_and_tables, get_session, engine
 from .models import Question, Game, Player, Round, Submission, Vote
 import random
 import socketio
+from sqlalchemy.exc import OperationalError
 
 # --- Initialize Socket.IO ---
 sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
@@ -37,8 +38,18 @@ app.add_middleware(
 # --- DB initialization ---
 @app.on_event("startup")
 def on_startup():
-    create_db_and_tables()
-
+    retries = 10  # number of attempts
+    wait_time = 2  # seconds between retries
+    for attempt in range(1, retries + 1):
+        try:
+            create_db_and_tables()
+            print("✅ Database connected and tables created.")
+            break
+        except OperationalError:
+            print(f"⚠️ Database not ready (attempt {attempt}/{retries}), retrying in {wait_time}s...")
+            time.sleep(wait_time)
+    else:
+        raise RuntimeError("❌ Database not ready after multiple attempts")
 # --- Pydantic Models for Swagger ---
 class ImportQuestionsPayload(BaseModel):
     questions: List[str] = ["What is your favorite color?", "Tell a funny story"]
