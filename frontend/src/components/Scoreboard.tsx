@@ -1,30 +1,27 @@
-import { useState } from "react";
-import { Socket } from "socket.io-client";
+import React from "react";
 
-interface PlayerScore {
-  id: string;
-  name: string;
-  score: number;
+interface Score {
+  player: string;
+  points: number;
 }
 
 interface ScoreboardProps {
-  gameId: string;
-  socket: Socket<any> | null;
+  scores: Score[];
 }
 
-export default function Scoreboard({ gameId, socket }: ScoreboardProps) {
-  const [scores, _setScores] = useState<PlayerScore[]>([]); // ✅ only setter unused
-
+const Scoreboard: React.FC<ScoreboardProps> = ({ scores }) => {
   return (
-    <div>
-      <h2>Scoreboard</h2>
+    <div className="p-4 border rounded-lg shadow-md">
+      <h3 className="font-semibold mb-2">Scoreboard</h3>
       <ul>
-        {scores.map((p: PlayerScore) => (
-          <li key={p.id}>
-            {p.name}: {p.score}
+        {scores.map((s) => (
+          <li key={s.player}>
+            {s.player}: {s.points}
           </li>
         ))}
       </ul>
     </div>
   );
-}
+};
+
+export default Scoreboard;

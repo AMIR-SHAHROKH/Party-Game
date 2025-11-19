@@ -1,19 +1,24 @@
+// src/App.tsx
 import React, { useState } from "react";
 import Lobby from "./components/Lobby";
-import AdminLobby from "./components/AdminLobby";
 
 const App: React.FC = () => {
   const [player, setPlayer] = useState<string>("");
   const [gameId, setGameId] = useState<string>("");
 
   return (
-    <div>
+    <>
       {!gameId ? (
         <Lobby setPlayer={setPlayer} setGameId={setGameId} />
       ) : (
-        <AdminLobby playerName={player} gameId={gameId} />
+        <div className="text-center mt-10">
+          <h1 className="text-2xl font-bold">
+            Player: {player}, Game ID: {gameId}
+          </h1>
+          <p>Game logic here...</p>
+        </div>
       )}
-    </div>
+    </>
   );
 };
 

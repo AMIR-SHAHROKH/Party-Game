@@ -13,24 +13,24 @@ const Lobby: React.FC<LobbyProps> = ({ setPlayer, setGameId }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch games every 5s
   const fetchGames = async () => {
     try {
-      const response = await getGames();
-      setGames(response.data.games);
+      const response: AxiosResponse<{ games?: GameInfo[] }> = await getGames();
+      // fallback to empty array if backend returns undefined
+      setGames(response.data.games ?? []);
     } catch (err) {
       console.error(err);
       setError("Failed to fetch games");
+      setGames([]); // ensure state is always an array
     }
   };
 
   useEffect(() => {
     fetchGames();
-    const interval = setInterval(fetchGames, 5000);
+    const interval = setInterval(fetchGames, 5000); // refresh every 5s
     return () => clearInterval(interval);
   }, []);
 
-  // Create a new game
   const handleCreateGame = async () => {
     if (!nameInput.trim()) {
       setError("Enter your name to continue.");
@@ -41,7 +41,7 @@ const Lobby: React.FC<LobbyProps> = ({ setPlayer, setGameId }) => {
     try {
       setPlayer(nameInput.trim());
       const response: AxiosResponse<GameResponse> = await createGame(nameInput.trim());
-      setGameId(response.data.game_id);
+      setGameId(response.data.game_id?.toString() ?? ""); // fallback to empty string
     } catch (err) {
       console.error(err);
       setError("Failed to create game");
@@ -50,8 +50,7 @@ const Lobby: React.FC<LobbyProps> = ({ setPlayer, setGameId }) => {
     }
   };
 
-  // Join an existing game
-  const handleJoinGame = async (gameId: string | number) => {
+  const handleJoinGame = async (gameIdParam: string | number) => {
     if (!nameInput.trim()) {
       setError("Enter your name to join a game.");
       return;
@@ -59,9 +58,9 @@ const Lobby: React.FC<LobbyProps> = ({ setPlayer, setGameId }) => {
     setError(null);
     setLoading(true);
     try {
-      const res = await joinGame(gameId, nameInput.trim());
+      const res = await joinGame(gameIdParam, nameInput.trim());
       setPlayer(nameInput.trim());
-      setGameId(res.data.game_id);
+      setGameId(res.data.game_id?.toString() ?? ""); // fallback
     } catch (err) {
       console.error(err);
       setError("Failed to join game");
@@ -105,7 +104,7 @@ const Lobby: React.FC<LobbyProps> = ({ setPlayer, setGameId }) => {
                   onClick={() => handleJoinGame(game.game_id)}
                   className="w-full py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition duration-200"
                 >
-                  Join Game {game.game_id} ({game.players_count} players)
+                  Join Game {game.game_id ?? "N/A"} ({game.players_count ?? 0} players)
                 </button>
               </li>
             ))}
