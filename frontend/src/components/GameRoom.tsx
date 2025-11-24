@@ -1,31 +1,33 @@
-import React, { useEffect } from "react";
-import PlayersList from "./PlayersList";
-import { socket } from "../socket";
+// src/components/GameRoom.tsx
+import { useEffect, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { getGame } from "../api/gameApi";
 
-interface GameRoomProps {
-  roundId: number;
-  question: string;
-  gameId: string;
-}
+export default function GameRoom() {
+  const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const playerName = searchParams.get("name") || "Player";
 
-const GameRoom: React.FC<GameRoomProps> = ({ roundId, question, gameId }) => {
+  const [game, setGame] = useState<any>(null);
+
   useEffect(() => {
-    socket.on("update", (data: any) => {
-      console.log("Update received", data);
-    });
-
-    return () => {
-      socket.off("update");
+    const loadGame = async () => {
+      try {
+        const res = await getGame(id!);
+        setGame(res.data);
+      } catch (e) {
+        console.error(e);
+        alert("Could not load game data");
+      }
     };
-  }, []);
+    loadGame();
+  }, [id]);
 
   return (
-    <div>
-      <h2>Round {roundId}</h2>
-      <p>{question}</p>
-      <PlayersList players={[]} />
+    <div style={{ textAlign: "center", padding: 20 }}>
+      <h1>Game Room #{id}</h1>
+      <p>Welcome, {playerName}!</p>
+      {game && <p>Created at: {new Date(game.created_at).toLocaleString()}</p>}
     </div>
   );
-};
-
-export default GameRoom;
+}
