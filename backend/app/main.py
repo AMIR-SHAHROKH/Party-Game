@@ -228,28 +228,47 @@ async def join_game(sid, data):
     provided_id = data.get("player_id")
 
     async with async_session() as session:
+        player = None
+
         if provided_id:
+            # Try to fetch existing player
             player = await session.get(Player, provided_id)
-            if not player:
-                player = Player(name=name, game_id=game_id, ready=False)
-                session.add(player)
-                await session.commit()
-                await session.refresh(player)
-        else:
+            if player:
+                if player.game_id != game_id:
+                    # Prevent ID reuse from another game
+                    player = None
+                else:
+                    # Update name if changed
+                    if player.name != name:
+                        player.name = name
+                        session.add(player)
+                        await session.commit()
+        if not player:
+            # Check if a player with the same name exists in this game
+            result = await session.execute(
+                select(Player).where(Player.game_id == game_id, Player.name == name)
+            )
+            player = result.scalars().first()
+
+        if not player:
+            # Create new player if none exists
             player = Player(name=name, game_id=game_id, ready=False)
             session.add(player)
             await session.commit()
             await session.refresh(player)
 
+        # Save sid mapping
         SID_TO_PLAYER[sid] = player.id
         sio.enter_room(sid, f"game_{game_id}")
 
+        # Send current player list
         result = await session.execute(select(Player).where(Player.game_id == game_id))
         players = result.scalars().all()
         simplified = [{"id": p.id, "name": p.name, "ready": p.ready} for p in players]
 
     await sio.emit("player_list", {"players": simplified}, room=f"game_{game_id}")
-    await sio.emit("joined", {"player_id": player.id}, to=sid)
+    await sio.emit("joined", {"player_id": player.id, "name": player.name}, to=sid)
+
 
 @sio.event
 async def toggle_ready(sid, data):
