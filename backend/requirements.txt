@@ -4,3 +4,13 @@ python-socketio[asgi]
 sqlmodel
 psycopg2-binary
 python-dotenv
+sqladmin
+jinja2<3.1
+aiofiles
+aioredis==1.3.1
+redis>=5.0.0
+fastapi-admin==1.0.2
+asyncpg
+aioredis
+passlib[bcrypt]==1.7.4
+asyncpg

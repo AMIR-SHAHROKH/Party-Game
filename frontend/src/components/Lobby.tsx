@@ -5,6 +5,7 @@ import { createGame, getGames, joinGame } from "../api/gameApi";
 
 export default function Lobby() {
   const [hostName, setHostName] = useState("");
+  const [rounds, setRounds] = useState(5); // NEW
   const [joinName, setJoinName] = useState("");
   const [joinId, setJoinId] = useState("");
   const [games, setGames] = useState<any[]>([]);
@@ -29,7 +30,7 @@ export default function Lobby() {
     if (!hostName.trim()) return alert("Enter your name!");
     setLoading(true);
     try {
-      const res = await createGame(hostName);
+      const res = await createGame(hostName, rounds); // UPDATED
       navigate(`/game/${res.data.game_id}`);
     } catch (e) {
       console.error(e);
@@ -40,7 +41,8 @@ export default function Lobby() {
   };
 
   const handleJoin = async () => {
-    if (!joinId.trim() || !joinName.trim()) return alert("Enter game ID and name!");
+    if (!joinId.trim() || !joinName.trim())
+      return alert("Enter game ID and name!");
     try {
       await joinGame(joinId, joinName);
       navigate(`/game/${joinId}?name=${joinName}`);
@@ -54,19 +56,34 @@ export default function Lobby() {
     <div style={styles.container}>
       <h1 style={styles.title}>Lobby</h1>
 
+      {/* CREATE GAME */}
       <div style={styles.card}>
         <h2>Create Game</h2>
+
         <input
           placeholder="Your Name"
           value={hostName}
           onChange={(e) => setHostName(e.target.value)}
           style={styles.input}
         />
+
+        {/* NEW ROUNDS DROPDOWN */}
+        <select
+          value={rounds}
+          onChange={(e) => setRounds(Number(e.target.value))}
+          style={styles.input}
+        >
+          <option value={5}>5 Rounds</option>
+          <option value={10}>10 Rounds</option>
+          <option value={15}>15 Rounds</option>
+        </select>
+
         <button onClick={handleCreate} style={styles.button}>
           {loading ? "Creating..." : "Create Game"}
         </button>
       </div>
 
+      {/* JOIN GAME */}
       <div style={styles.card}>
         <h2>Join Game</h2>
         <input
@@ -86,12 +103,15 @@ export default function Lobby() {
         </button>
       </div>
 
+      {/* ACTIVE GAMES */}
       <div style={styles.card}>
         <h2>Active Games</h2>
         {games.length === 0 && <p>No active games yet.</p>}
         {games.map((g) => (
           <div key={g.id} style={styles.gameRow}>
-            <span>Game #{g.id}</span>
+            <span>
+              Game #{g.id} {g.rounds ? `(${g.rounds} rounds)` : ""}
+            </span>
             <button
               style={styles.smallButton}
               onClick={() => navigate(`/game/${g.id}`)}
@@ -106,11 +126,50 @@ export default function Lobby() {
 }
 
 const styles: any = {
-  container: { maxWidth: 600, margin: "0 auto", padding: 20, fontFamily: "Arial", textAlign: "center" },
+  container: {
+    maxWidth: 600,
+    margin: "0 auto",
+    padding: 20,
+    fontFamily: "Arial",
+    textAlign: "center",
+  },
   title: { fontSize: 36, marginBottom: 20 },
-  card: { background: "#f4f4f4", padding: 20, borderRadius: 12, marginBottom: 20 },
-  input: { width: "90%", padding: 10, borderRadius: 8, margin: "8px 0", border: "1px solid #ccc" },
-  button: { width: "95%", padding: 12, background: "#4a90e2", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" },
-  gameRow: { display: "flex", justifyContent: "space-between", padding: 10, background: "#fff", marginTop: 10, borderRadius: 8 },
-  smallButton: { padding: "6px 12px", background: "#5c7aea", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" },
+  card: {
+    background: "#f4f4f4",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  input: {
+    width: "90%",
+    padding: 10,
+    borderRadius: 8,
+    margin: "8px 0",
+    border: "1px solid #ccc",
+  },
+  button: {
+    width: "95%",
+    padding: 12,
+    background: "#4a90e2",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+  },
+  gameRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: 10,
+    background: "#fff",
+    marginTop: 10,
+    borderRadius: 8,
+  },
+  smallButton: {
+    padding: "6px 12px",
+    background: "#5c7aea",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+  },
 };

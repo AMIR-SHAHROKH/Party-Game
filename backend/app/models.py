@@ -1,8 +1,6 @@
-# backend/app/models.py
-from sqlmodel import SQLModel, Field
-from typing import Optional
+from sqlmodel import SQLModel, Field, Relationship
 from datetime import datetime
-from pydantic import BaseModel
+from typing import Optional, List
 
 class Question(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -11,31 +9,30 @@ class Question(SQLModel, table=True):
 class Game(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    rounds: int = 10
+    host_player_id: Optional[int] = None
+    players: List["Player"] = Relationship(back_populates="game")
 
 class Player(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
-    game_id: int
+    game_id: int = Field(foreign_key="game.id")
+    ready: bool = False
+    game: Optional[Game] = Relationship(back_populates="players")
 
 class Round(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    game_id: int
-    question_id: int
-    state: str = "collecting"
+    game_id: int = Field(foreign_key="game.id")
 
 class Submission(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    round_id: int
-    player_id: int
+    player_id: int = Field(foreign_key="player.id")
+    round_id: int = Field(foreign_key="round.id")
     text: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class Vote(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    round_id: int
-    submission_id: int
-    voter_player_id: int
+    round_id: int = Field(foreign_key="round.id")
+    submission_id: int = Field(foreign_key="submission.id")
+    voter_player_id: int = Field(foreign_key="player.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
-
-class JoinGamePayload(BaseModel):
-    player_name: str
