@@ -92,7 +92,6 @@ export default function GameRoom() {
       localStorage.setItem("player_name", data.name);
 
       setGame(prev => {
-        // Remove duplicates with same ID or name
         const filteredPlayers = prev.players.filter(p => p.id !== data.player_id && p.name !== data.name);
         return { ...prev, players: [...filteredPlayers, { id: data.player_id, name: data.name, ready: false }] };
       });
@@ -117,21 +116,22 @@ export default function GameRoom() {
       }
     });
 
+    // --- Start game redirects all players ---
     socket.on("game_started", () => {
-      navigate(`/game/${id}/play`);
+      if (!playerId) return;
+      navigate(`/game/${id}/play?player_id=${playerId}&name=${encodeURIComponent(playerName)}&host=${isHost}`);
     });
 
     socket.on("error", (err) => console.warn("Socket error:", err));
     socket.on("disconnect", () => console.log("Socket disconnected"));
 
     return () => socket.disconnect();
-  }, [id, navigate, playerId]);
+  }, [id, navigate, playerId, playerName, isHost]);
 
   // --- Toggle ready ---
   const toggleReady = () => {
     if (!playerId) return;
 
-    // Optimistically update UI
     setGame(prev => {
       const updatedPlayers = prev.players.map(p => 
         p.id === playerId ? { ...p, ready: !isReady } : p
@@ -141,7 +141,6 @@ export default function GameRoom() {
 
     setIsReady(!isReady);
 
-    // Emit to server
     socket.emit("toggle_ready", { game_id: Number(id), player_id: playerId, ready: !isReady });
   };
 

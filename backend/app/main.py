@@ -1,5 +1,3 @@
-# backend/app/main.py
-
 import random
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -13,22 +11,26 @@ from sqlmodel import select
 from redis.asyncio import Redis
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from .db import engine, async_session, create_db_and_tables, get_session
+from .db import async_session
 from .models import Question, Game, Player, Round, Submission, Vote
 
-# --- Socket.IO setup ---
+# -------------------------------------------------
+# Socket.IO setup (mounted, not replacing FastAPI)
+# -------------------------------------------------
 sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
 
-# --- FastAPI app setup ---
+# -------------------------------------------------
+# FastAPI app
+# -------------------------------------------------
 app = FastAPI(
     title="🎉 Q&A Party Game API",
     description="""
-Interactive real‑time game API where players answer fun questions and vote for the best one!
+Interactive real-time game API where players answer fun questions and vote for the best one!
 Use the REST endpoints for admin tasks and the Socket.IO events for gameplay.
 """,
     version="1.0.0",
     docs_url="/swagger",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 app.add_middleware(
@@ -39,16 +41,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Mount Socket.IO + FastAPI ---
-asgi_app = socketio.ASGIApp(sio, app)
+# mount socket.io under /ws so FastAPI remains the root ASGI app (OpenAPI works)
+app.mount("/ws", socketio.ASGIApp(sio))
 
-# --- Redis client config ---
+# -------------------------------------------------
+# Redis (used for ephemeral / runtime state that models don't store)
+# - Stores: current round for a game, question assigned to a round, revealed flag
+# -------------------------------------------------
 redis_client: Optional[Redis] = None
 REDIS_HOST = "redis"
 REDIS_PORT = 6379
 REDIS_DB = 0
 
-# --- Pydantic payloads ---
+# -------------------------------------------------
+# Pydantic payloads
+# -------------------------------------------------
 class ImportQuestionsPayload(BaseModel):
     questions: List[str]
 
@@ -59,34 +66,61 @@ class CreateGamePayload(BaseModel):
 class JoinGamePayload(BaseModel):
     player_name: str
 
-# --- Dependency for SQLModel async session ---
+class StartGamePayload(BaseModel):
+    host_id: int
+
+class StartRoundPayload(BaseModel):
+    host_id: int
+
+class SubmitAnswerPayload(BaseModel):
+    player_id: int
+    text: str
+
+class RevealPayload(BaseModel):
+    host_id: int
+
+class VotePayload(BaseModel):
+    player_id: int
+    submission_id: int
+
+# -------------------------------------------------
+# DB session dependency
+# -------------------------------------------------
 async def get_async_session() -> AsyncSession:
     async with async_session() as session:
         yield session
 
-# --- Startup event ---
+# -------------------------------------------------
+# Startup (SAFE — no schema changes)
+# -------------------------------------------------
 @app.on_event("startup")
 async def startup_event():
     global redis_client
-    redis_client = Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-    try:
-        pong = await redis_client.ping()
-        print(f"✅ Redis connected: {pong}")
-    except Exception as e:
-        raise RuntimeError(f"❌ Redis connection failed: {e}")
+    redis_client = Redis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        db=REDIS_DB,
+        decode_responses=True,
+    )
+    # ensure redis reachable (will raise if not)
+    await redis_client.ping()
+    print("✅ Redis connected")
+    # NOTE: Do NOT create/drop tables here. Use migrations for schema management.
 
-    await create_db_and_tables()
-    print("✅ Database tables created")
-
-# --- Helper function ---
+# -------------------------------------------------
+# Helper
+# -------------------------------------------------
 async def pick_random_question(session: AsyncSession) -> Question:
     result = await session.execute(select(Question))
     questions = result.scalars().all()
     if not questions:
+        # return a dummy object compatible with your model
         return Question(id=0, text="Default question for testing")
     return random.choice(questions)
 
-# --- REST endpoints ---
+# -------------------------------------------------
+# REST endpoints (uses models from models.py)
+# -------------------------------------------------
 @app.get("/question/random")
 async def get_random_question(session: AsyncSession = Depends(get_async_session)):
     q = await pick_random_question(session)
@@ -98,8 +132,7 @@ async def import_questions(
     session: AsyncSession = Depends(get_async_session)
 ):
     for t in payload.questions:
-        q = Question(text=t)
-        session.add(q)
+        session.add(Question(text=t))
     await session.commit()
     return {"imported": len(payload.questions)}
 
@@ -108,22 +141,22 @@ async def create_game(
     payload: CreateGamePayload,
     session: AsyncSession = Depends(get_async_session)
 ):
-    host_name = payload.host_name or "Host"
     g = Game(rounds=payload.rounds)
     session.add(g)
     await session.commit()
     await session.refresh(g)
 
-    p = Player(name=host_name, game_id=g.id, ready=False)
+    p = Player(name=payload.host_name, game_id=g.id, ready=False)
     session.add(p)
     await session.commit()
     await session.refresh(p)
 
+    # set host
     g.host_player_id = p.id
     session.add(g)
     await session.commit()
-    await session.refresh(g)
-
+    # set initial runtime state in redis (no round yet)
+    await redis_client.delete(f"game:{g.id}:current_round")
     return {"game_id": g.id, "host_player_id": p.id}
 
 @app.get("/games")
@@ -139,14 +172,17 @@ async def list_games(session: AsyncSession = Depends(get_async_session)):
 async def get_game(game_id: int, session: AsyncSession = Depends(get_async_session)):
     game = await session.get(Game, game_id)
     if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
+        raise HTTPException(404, "Game not found")
     result = await session.execute(select(Player).where(Player.game_id == game_id))
     players = result.scalars().all()
+    # include current active round id (from redis) for convenience
+    current_round = await redis_client.get(f"game:{game_id}:current_round")
     return {
         "id": game.id,
         "created_at": game.created_at.isoformat() if game.created_at else None,
         "rounds": game.rounds,
         "host_player_id": game.host_player_id,
+        "current_round_id": int(current_round) if current_round else None,
         "players": [{"id": p.id, "name": p.name, "ready": p.ready} for p in players],
     }
 
@@ -158,71 +194,260 @@ async def join_game_rest(
 ):
     game = await session.get(Game, game_id)
     if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
+        raise HTTPException(404, "Game not found")
     p = Player(name=payload.player_name or "Player", game_id=game_id)
     session.add(p)
     await session.commit()
     await session.refresh(p)
+    # notify via Socket.IO
+    await sio.emit("player_joined", {"game_id": game_id, "player": {"id": p.id, "name": p.name}}, room=f"game_{game_id}")
     return {"player_id": p.id, "game_id": game_id}
 
-@app.get("/games/{game_id}/players")
-async def get_players(game_id: int, session: AsyncSession = Depends(get_async_session)):
+# -------------------------------------------------
+# Endpoint: start game (keeps schema unchanged; runtime state in redis)
+# -------------------------------------------------
+@app.post("/games/{game_id}/start")
+async def start_game(
+    game_id: int,
+    payload: StartGamePayload,
+    session: AsyncSession = Depends(get_async_session)
+):
     game = await session.get(Game, game_id)
     if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
-    result = await session.execute(select(Player).where(Player.game_id == game_id))
-    players = result.scalars().all()
-    return [{"id": p.id, "name": p.name, "ready": p.ready} for p in players]
+        raise HTTPException(404, "Game not found")
+    if game.host_player_id != payload.host_id:
+        raise HTTPException(403, "Only host can start the game")
+    # mark game started in redis (we don't have a model field for started_at)
+    await redis_client.set(f"game:{game_id}:started", "1")
+    await sio.emit("game_started", {"game_id": game_id, "rounds": game.rounds}, room=f"game_{game_id}")
+    return {"status": "started", "game_id": game_id}
 
-@app.get("/games/{game_id}/scores")
-async def get_scores(game_id: int, session: AsyncSession = Depends(get_async_session)):
+# -------------------------------------------------
+# Endpoint: start round
+# - creates a Round row
+# - picks a question and stores mapping in Redis: round:{round_id}:question -> question_id
+# - sets revealed flag to "0"
+# - sets game:{game_id}:current_round -> round_id
+# - emits socket event with question text (hide text if you want)
+# -------------------------------------------------
+@app.post("/games/{game_id}/start_round")
+async def start_round(
+    game_id: int,
+    payload: StartRoundPayload,
+    session: AsyncSession = Depends(get_async_session)
+):
     game = await session.get(Game, game_id)
     if not game:
-        raise HTTPException(status_code=404, detail="Game not found")
+        raise HTTPException(404, "Game not found")
+    if game.host_player_id != payload.host_id:
+        raise HTTPException(403, "Only host can start rounds")
+
+    # create round row
+    rnd = Round(game_id=game_id)
+    session.add(rnd)
+    await session.commit()
+    await session.refresh(rnd)
+
+    # pick random question and store mapping in redis
+    q = await pick_random_question(session)
+    await redis_client.set(f"round:{rnd.id}:question_id", q.id)
+    await redis_client.set(f"round:{rnd.id}:revealed", "0")
+    await redis_client.set(f"game:{game_id}:current_round", str(rnd.id))
+
+    # emit the new round (question may be sent to host only — here we emit question text to all for simplicity)
+    await sio.emit("round_started", {"game_id": game_id, "round_id": rnd.id, "question": {"id": q.id, "text": q.text}}, room=f"game_{game_id}")
+
+    return {"round_id": rnd.id, "question_id": q.id}
+
+# -------------------------------------------------
+# Endpoint: submit answer for a round
+# -------------------------------------------------
+@app.post("/rounds/{round_id}/submit")
+async def submit_answer(
+    round_id: int,
+    payload: SubmitAnswerPayload,
+    session: AsyncSession = Depends(get_async_session)
+):
+    rnd = await session.get(Round, round_id)
+    if not rnd:
+        raise HTTPException(404, "Round not found")
+
+    # ensure player belongs to that game (basic guard)
+    player = await session.get(Player, payload.player_id)
+    if not player or player.game_id != rnd.game_id:
+        raise HTTPException(400, "Invalid player for this round")
+
+    sub = Submission(round_id=round_id, player_id=payload.player_id, text=payload.text)
+    session.add(sub)
+    await session.commit()
+    await session.refresh(sub)
+
+    # notify other players
+    await sio.emit("submission_received", {"round_id": round_id, "submission_id": sub.id}, room=f"game_{rnd.game_id}")
+
+    return {"status": "submitted", "submission_id": sub.id}
+
+# -------------------------------------------------
+# Endpoint: reveal submissions for a round (host only)
+# - flip revealed flag in redis and return all submissions
+# -------------------------------------------------
+@app.post("/rounds/{round_id}/reveal")
+async def reveal_round(
+    round_id: int,
+    payload: RevealPayload,
+    session: AsyncSession = Depends(get_async_session)
+):
+    rnd = await session.get(Round, round_id)
+    if not rnd:
+        raise HTTPException(404, "Round not found")
+
+    game = await session.get(Game, rnd.game_id)
+    if not game:
+        raise HTTPException(404, "Game not found")
+    if game.host_player_id != payload.host_id:
+        raise HTTPException(403, "Only host can reveal")
+
+    # set revealed flag
+    await redis_client.set(f"round:{round_id}:revealed", "1")
+
+    # fetch submissions
+    result = await session.execute(select(Submission).where(Submission.round_id == round_id))
+    subs = result.scalars().all()
+
+    # emit revealed event with submissions
+    await sio.emit("round_revealed", {"round_id": round_id, "submissions": [{"id": s.id, "text": s.text} for s in subs]}, room=f"game_{rnd.game_id}")
+
+    return {"submissions": [{"id": s.id, "text": s.text} for s in subs]}
+
+# -------------------------------------------------
+# Endpoint: vote (requires round revealed)
+# - uses Vote model's voter_player_id field
+# -------------------------------------------------
+@app.post("/rounds/{round_id}/vote")
+async def vote_submission(
+    round_id: int,
+    payload: VotePayload,
+    session: AsyncSession = Depends(get_async_session)
+):
+    rnd = await session.get(Round, round_id)
+    if not rnd:
+        raise HTTPException(404, "Round not found")
+
+    # ensure round revealed
+    revealed = await redis_client.get(f"round:{round_id}:revealed")
+    if revealed != "1":
+        raise HTTPException(400, "Round not revealed yet")
+
+    # ensure player hasn't voted on this round
+    existing = await session.execute(
+        select(Vote).where(
+            Vote.round_id == round_id,
+            Vote.voter_player_id == payload.player_id,
+        )
+    )
+    if existing.scalars().first():
+        raise HTTPException(400, "Player already voted")
+
+    # ensure submission exists and belongs to this round
+    submission = await session.get(Submission, payload.submission_id)
+    if not submission or submission.round_id != round_id:
+        raise HTTPException(400, "Invalid submission for this round")
+
+    vote = Vote(
+        round_id=round_id,
+        submission_id=payload.submission_id,
+        voter_player_id=payload.player_id,
+    )
+    session.add(vote)
+    await session.commit()
+    await session.refresh(vote)
+
+    # emit vote update (counts per submission) — compute counts quickly
+    result_counts = await session.execute(select(Vote.submission_id).where(Vote.round_id == round_id))
+    submission_ids = [row[0] for row in result_counts.all()]
+    counts: Dict[int, int] = {}
+    for sid in submission_ids:
+        counts[sid] = counts.get(sid, 0) + 1
+
+    await sio.emit("vote_update", {"round_id": round_id, "counts": counts}, room=f"game_{rnd.game_id}")
+
+    return {"status": "voted", "vote_id": vote.id}
+
+# -------------------------------------------------
+# Endpoint: round results (calculate points per player for this round)
+# - does NOT store aggregated player score in DB (models have no score field)
+# - returns mapping player_id -> points for the round
+# -------------------------------------------------
+@app.get("/rounds/{round_id}/results")
+async def round_results(
+    round_id: int,
+    session: AsyncSession = Depends(get_async_session)
+):
+    # join Vote -> Submission to find which player each vote credited
+    q = select(Vote.submission_id, Submission.player_id).join(Submission, Submission.id == Vote.submission_id).where(Vote.round_id == round_id)
+    result = await session.execute(q)
+    rows = result.all()
+
+    score_map: Dict[int, int] = {}
+    for submission_id, player_id in rows:
+        score_map[player_id] = score_map.get(player_id, 0) + 1
+
+    return {"round_id": round_id, "scores": score_map}
+
+# -------------------------------------------------
+# Endpoint: game scores (aggregate over all rounds in a game)
+# - returns computed scores per player for the game
+# -------------------------------------------------
+@app.get("/games/{game_id}/scores")
+async def game_scores(
+    game_id: int,
+    session: AsyncSession = Depends(get_async_session)
+):
+    # collect round ids for game
     result_rounds = await session.execute(select(Round).where(Round.game_id == game_id))
     rounds = result_rounds.scalars().all()
     round_ids = [r.id for r in rounds]
     if not round_ids:
         return []
 
-    result_subs = await session.execute(select(Submission).where(Submission.round_id.in_(round_ids)))
-    submissions = result_subs.scalars().all()
-    submission_map = {s.id: s for s in submissions}
+    # fetch votes for these rounds and map to player ids
+    result = await session.execute(
+        select(Vote.submission_id, Submission.player_id)
+        .join(Submission, Submission.id == Vote.submission_id)
+        .where(Vote.round_id.in_(round_ids))
+    )
+    rows = result.all()
 
-    result_votes = await session.execute(select(Vote).where(Vote.round_id.in_(round_ids)))
-    votes = result_votes.scalars().all()
+    score_map: Dict[int, int] = {}
+    for _, player_id in rows:
+        score_map[player_id] = score_map.get(player_id, 0) + 1
 
-    scores: Dict[int, int] = {}
-    for v in votes:
-        sub = submission_map.get(v.submission_id)
-        if not sub:
-            continue
-        scores[sub.player_id] = scores.get(sub.player_id, 0) + 1
-
+    # assemble player info
     results = []
-    for player_id, pts in scores.items():
+    for player_id, pts in score_map.items():
         player = await session.get(Player, player_id)
         results.append({"player_id": player_id, "player_name": player.name if player else None, "points": pts})
 
     results.sort(key=lambda x: x["points"], reverse=True)
     return results
 
-# --- Global State for Socket.IO ---
+# -------------------------------------------------
+# Socket.IO: simple connection + join room handlers
+# -------------------------------------------------
 SID_TO_PLAYER: Dict[str, int] = {}
-GAME_ROUND_STATE: Dict[int, int] = {}
 
-# --- Socket.IO Events ---
 @sio.event
 async def connect(sid, environ):
     print(f"✅ Client connected: {sid}")
 
 @sio.event
 async def disconnect(sid):
-    print(f"❌ Client disconnected: {sid}")
     SID_TO_PLAYER.pop(sid, None)
+    print(f"❌ Client disconnected: {sid}")
 
 @sio.event
 async def join_game(sid, data):
+    # joins room and returns current player list
     game_id = int(data.get("game_id", 0))
     name = data.get("name") or "Player"
     provided_id = data.get("player_id")
@@ -231,85 +456,32 @@ async def join_game(sid, data):
         player = None
 
         if provided_id:
-            # Try to fetch existing player
             player = await session.get(Player, provided_id)
-            if player:
-                if player.game_id != game_id:
-                    # Prevent ID reuse from another game
-                    player = None
-                else:
-                    # Update name if changed
-                    if player.name != name:
-                        player.name = name
-                        session.add(player)
-                        await session.commit()
+            if player and player.game_id != game_id:
+                player = None
+
         if not player:
-            # Check if a player with the same name exists in this game
             result = await session.execute(
                 select(Player).where(Player.game_id == game_id, Player.name == name)
             )
             player = result.scalars().first()
 
         if not player:
-            # Create new player if none exists
             player = Player(name=name, game_id=game_id, ready=False)
             session.add(player)
             await session.commit()
             await session.refresh(player)
 
-        # Save sid mapping
         SID_TO_PLAYER[sid] = player.id
         sio.enter_room(sid, f"game_{game_id}")
 
-        # Send current player list
         result = await session.execute(select(Player).where(Player.game_id == game_id))
         players = result.scalars().all()
-        simplified = [{"id": p.id, "name": p.name, "ready": p.ready} for p in players]
 
-    await sio.emit("player_list", {"players": simplified}, room=f"game_{game_id}")
+    await sio.emit(
+        "player_list",
+        {"players": [{"id": p.id, "name": p.name, "ready": p.ready} for p in players]},
+        room=f"game_{game_id}",
+    )
+
     await sio.emit("joined", {"player_id": player.id, "name": player.name}, to=sid)
-
-
-@sio.event
-async def toggle_ready(sid, data):
-    game_id = int(data.get("game_id", 0))
-    ready = bool(data.get("ready", False))
-    player_id = SID_TO_PLAYER.get(sid)
-    if not player_id:
-        return
-
-    async with async_session() as session:
-        player = await session.get(Player, player_id)
-        if not player:
-            return
-        player.ready = ready
-        session.add(player)
-        await session.commit()
-
-        result = await session.execute(select(Player).where(Player.game_id == game_id))
-        players = result.scalars().all()
-        simplified = [{"id": p.id, "name": p.name, "ready": p.ready} for p in players]
-
-    await sio.emit("player_list", {"players": simplified}, room=f"game_{game_id}")
-
-@sio.event
-async def start_game(sid, data):
-    game_id = int(data.get("game_id", 0))
-    player_id = SID_TO_PLAYER.get(sid)
-
-    async with async_session() as session:
-        game = await session.get(Game, game_id)
-        if not game:
-            await sio.emit("error", {"msg": "game not found"}, to=sid)
-            return
-        if game.host_player_id and player_id != game.host_player_id:
-            await sio.emit("error", {"msg": "only host can start the game"}, to=sid)
-            return
-        result = await session.execute(select(Player).where(Player.game_id == game_id))
-        players = result.scalars().all()
-        if not players:
-            await sio.emit("error", {"msg": "no players"}, to=sid)
-            return
-
-    await sio.emit("game_started", {"game_id": game_id, "rounds": game.rounds}, room=f"game_{game_id}")
-    GAME_ROUND_STATE[game_id] = None

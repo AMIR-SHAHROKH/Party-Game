@@ -23,12 +23,13 @@ export default function PlayGame() {
   const [answerText, setAnswerText] = useState("");
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
-  const [phase, setPhase] = useState<"waiting" | "collecting" | "voting" | "finished">(
-    "waiting"
-  );
+  const [phase, setPhase] = useState<
+    "waiting" | "collecting" | "voting" | "finished"
+  >("waiting");
 
   const socketRef = useRef<any>(null);
 
+  // Load game configuration
   useEffect(() => {
     const load = async () => {
       try {
@@ -41,6 +42,7 @@ export default function PlayGame() {
     load();
   }, [id]);
 
+  // Socket setup
   useEffect(() => {
     const s = io(SOCKET_URL, { transports: ["websocket"] });
     socketRef.current = s;
@@ -63,10 +65,6 @@ export default function PlayGame() {
       setRoundIndex((r) => r + 1);
     });
 
-    s.on("submission_received", () => {
-      // optional: show counts etc.
-    });
-
     s.on("submissions_revealed", (data: any) => {
       setSubmissions(data.submissions || []);
       setPhase("voting");
@@ -76,102 +74,316 @@ export default function PlayGame() {
       setVoteCounts(data.counts || {});
     });
 
-    s.on("round_finished", (data: any) => {
+    s.on("round_finished", () => {
       setPhase("finished");
     });
 
     return () => s.disconnect();
   }, [id, playerName, playerIdParam]);
 
-  // host triggers start_round to create a Round row on server
+  // Host-only: start round
   const hostStartRound = () => {
     socketRef.current.emit("start_round", { game_id: Number(id) });
   };
 
+  // Player: submit answer
   const submitAnswer = () => {
     if (!roundId || !answerText.trim()) return;
-    socketRef.current.emit("submit_answer", { round_id: roundId, text: answerText.trim() });
+    socketRef.current.emit("submit_answer", {
+      round_id: roundId,
+      text: answerText.trim(),
+    });
     setAnswerText("");
   };
 
+  // Host: reveal submissions
   const reveal = () => {
     socketRef.current.emit("reveal_submissions", { round_id: roundId });
   };
 
+  // Player: vote on submission
   const vote = (submission_id: number) => {
-    socketRef.current.emit("vote_submission", { round_id: roundId, submission_id });
+    socketRef.current.emit("vote_submission", {
+      round_id: roundId,
+      submission_id,
+    });
   };
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.title}>Game Play — Round {roundIndex}/{roundsTotal}</h1>
+      <div style={styles.container}>
+        <h1 style={styles.title}>
+          Game Play  •  Round {roundIndex}/{roundsTotal}
+        </h1>
 
-      <div style={styles.card}>
-        <h2 style={styles.cardTitle}>Phase: {phase}</h2>
+        <div style={styles.phaseBanner[phase]}>
+          Phase: {phase.toUpperCase()}
+        </div>
 
-        {phase === "waiting" && isHost && (
-          <>
-            <p>Host: press to start the first round</p>
-            <button onClick={hostStartRound} style={styles.btn}>Start Round</button>
-          </>
-        )}
+        <div style={styles.card}>
+          {/* WAITING */}
+          {phase === "waiting" && (
+            <div style={styles.section}>
+              <p style={styles.infoText}>
+                Waiting for host to start the first round.
+              </p>
+              {isHost && (
+                <button style={styles.primaryBtn} onClick={hostStartRound}>
+                  Start Round
+                </button>
+              )}
+            </div>
+          )}
 
-        {phase === "collecting" && (
-          <>
-            <h3 style={styles.cardTitle}>Question</h3>
-            <p>{question}</p>
+          {/* COLLECTING */}
+          {phase === "collecting" && (
+            <div style={styles.section}>
+              <h2 style={styles.cardTitle}>Question</h2>
+              <div style={styles.questionBox}>{question}</div>
 
-            <textarea
-              placeholder="Type your answer..."
-              value={answerText}
-              onChange={(e) => setAnswerText(e.target.value)}
-              style={styles.textarea}
-            />
-            <button onClick={submitAnswer} style={styles.btn}>Submit Answer</button>
+              <textarea
+                style={styles.textarea}
+                value={answerText}
+                onChange={(e) => setAnswerText(e.target.value)}
+                placeholder="Type your answer..."
+              />
 
-            {isHost && (
-              <button onClick={reveal} style={{...styles.btn, background: "#f0b429", marginTop: 10}}>
-                Reveal Submissions
+              <button style={styles.primaryBtn} onClick={submitAnswer}>
+                Submit Answer
               </button>
-            )}
-          </>
-        )}
 
-        {phase === "voting" && (
-          <>
-            <h3 style={styles.cardTitle}>Vote for the best answer</h3>
-            {submissions.map((s) => (
-              <div key={s.submission_id} style={styles.submissionBox}>
-                <div>{s.anon_id}: {s.text}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>{voteCounts[s.submission_id] || 0}</div>
-                  <button style={styles.voteBtn} onClick={() => vote(s.submission_id)}>Vote</button>
+              {isHost && (
+                <button style={styles.revealBtn} onClick={reveal}>
+                  Reveal Submissions
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* VOTING */}
+          {phase === "voting" && (
+            <div style={styles.section}>
+              <h2 style={styles.cardTitle}>Vote for the best answer</h2>
+              {submissions.map((s, index) => (
+                <div
+                  key={s.submission_id}
+                  style={{
+                    ...styles.submissionBox,
+                    animationDelay: `${index * 0.05}s`,
+                  }}
+                  className="fadeIn"
+                >
+                  <div style={styles.submissionText}>
+                    {s.anon_id}: {s.text}
+                  </div>
+                  <div style={styles.voteWrapper}>
+                    <div style={styles.voteCount}>
+                      {voteCounts[s.submission_id] || 0}
+                    </div>
+                    <button
+                      style={styles.voteBtn}
+                      onClick={() => vote(s.submission_id)}
+                    >
+                      Vote
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </>
-        )}
+              ))}
+            </div>
+          )}
 
-        {phase === "finished" && (
-          <>
-            <h3 style={styles.cardTitle}>Round finished</h3>
-            <p>Host can start next round.</p>
-            {isHost && <button onClick={hostStartRound} style={styles.btn}>Start Next Round</button>}
-          </>
-        )}
+          {/* FINISHED */}
+          {phase === "finished" && (
+            <div style={styles.section}>
+              <h2 style={styles.cardTitle}>Round Completed</h2>
+              <p style={styles.infoText}>
+                Host can proceed to the next round.
+              </p>
+              {isHost && (
+                <button style={styles.primaryBtn} onClick={hostStartRound}>
+                  Start Next Round
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* CSS animations injected */}
+      <style>
+        {`
+        .fadeIn {
+          opacity: 0;
+          transform: translateY(8px);
+          animation: fadeInUp 0.35s forwards;
+        }
+
+        @keyframes fadeInUp {
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}
+      </style>
     </div>
   );
 }
 
-/* styles - reuse similar look */
 const styles: any = {
-  page: { padding: 20, minHeight: "100vh", background: "#0f0f13", color: "white", display: "flex", justifyContent: "center" },
-  title: { fontSize: 24, marginBottom: 12 },
-  card: { width: "95%", maxWidth: 800, background: "#1f1f2a", padding: 18, borderRadius: 10 },
-  cardTitle: { fontSize: 18, marginBottom: 8, fontWeight: 700 },
-  textarea: { width: "100%", height: 100, borderRadius: 8, padding: 10, marginTop: 8, border: "none" },
-  btn: { width: "100%", padding: 12, borderRadius: 8, background: "#5a8dee", border: "none", fontWeight: 700, color: "white", marginTop: 8 },
-  submissionBox: { display: "flex", justifyContent: "space-between", padding: 10, background: "#2b2b35", borderRadius: 8, marginTop: 8 },
-  voteBtn: { background: "#47d147", padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer" },
+  page: {
+    background: "#0d0d12",
+    color: "white",
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    padding: 24,
+  },
+
+  container: {
+    width: "100%",
+    maxWidth: 900,
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: 800,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+
+  phaseBanner: {
+    waiting: {
+      background: "#383838",
+      padding: 12,
+      borderRadius: 10,
+      fontWeight: 700,
+      marginBottom: 16,
+      textAlign: "center",
+    },
+    collecting: {
+      background: "#3254a8",
+      padding: 12,
+      borderRadius: 10,
+      fontWeight: 700,
+      marginBottom: 16,
+      textAlign: "center",
+    },
+    voting: {
+      background: "#7842a3",
+      padding: 12,
+      borderRadius: 10,
+      fontWeight: 700,
+      marginBottom: 16,
+      textAlign: "center",
+    },
+    finished: {
+      background: "#3c803c",
+      padding: 12,
+      borderRadius: 10,
+      fontWeight: 700,
+      marginBottom: 16,
+      textAlign: "center",
+    },
+  },
+
+  card: {
+    background: "#1a1a24",
+    padding: 22,
+    borderRadius: 12,
+  },
+
+  section: {
+    marginTop: 8,
+  },
+
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+    marginBottom: 12,
+  },
+
+  infoText: {
+    opacity: 0.8,
+    marginBottom: 12,
+  },
+
+  questionBox: {
+    background: "#242430",
+    padding: 16,
+    borderRadius: 10,
+    fontSize: 18,
+    marginBottom: 12,
+  },
+
+  textarea: {
+    width: "100%",
+    minHeight: 110,
+    background: "#22222c",
+    border: "none",
+    borderRadius: 10,
+    padding: 12,
+    color: "white",
+    fontSize: 16,
+    marginBottom: 12,
+  },
+
+  primaryBtn: {
+    width: "100%",
+    padding: 14,
+    background: "#5a8dee",
+    borderRadius: 10,
+    border: "none",
+    fontWeight: 700,
+    cursor: "pointer",
+    color: "white",
+    marginBottom: 12,
+  },
+
+  revealBtn: {
+    width: "100%",
+    padding: 14,
+    background: "#f0b429",
+    borderRadius: 10,
+    border: "none",
+    fontWeight: 700,
+    cursor: "pointer",
+    color: "#1a1a1a",
+    marginTop: 6,
+  },
+
+  submissionBox: {
+    background: "#262632",
+    padding: 14,
+    borderRadius: 10,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  submissionText: {
+    maxWidth: "70%",
+  },
+
+  voteWrapper: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+  },
+
+  voteCount: {
+    fontWeight: 900,
+    fontSize: 18,
+  },
+
+  voteBtn: {
+    padding: "8px 12px",
+    background: "#45c045",
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
+    fontWeight: 700,
+    color: "white",
+  },
 };
