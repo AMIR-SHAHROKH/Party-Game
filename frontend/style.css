@@ -1,0 +1,223 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Orbitron', sans-serif;
+}
+
+/* -------- BACKGROUND -------- */
+.app-bg {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background-image:
+        radial-gradient(circle at top, rgba(120,140,255,0.15), transparent 60%),
+        linear-gradient(rgba(10,12,18,0.7), rgba(10,12,18,0.9)),
+        url("Images/Background.png");
+
+    background-size: cover;
+    background-position: center;
+}
+
+/* -------- PANEL -------- */
+.start-panel {
+    position: relative;
+    width: 85%;
+    max-width: 360px;
+
+    padding: 40px;
+    padding-top: 140px;
+    border-radius: 22px;
+
+    background: rgba(255,255,255,0.03);
+
+
+    backdrop-filter: blur(26px) saturate(160%);
+    -webkit-backdrop-filter: blur(26px) saturate(160%);
+
+    border: 1px solid rgba(255,255,255,0.08);
+
+    box-shadow:
+    0 40px 80px rgba(0,0,0,0.65),
+    inset 0 1px 0 rgba(255,255,255,0.35);
+
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+}
+
+/* -------- LOGO -------- */
+.logo {
+    position: absolute;
+    top: -50px;
+    left: 50%;
+    transform: translateX(-50%);
+
+    width: 420px;
+    height: auto;
+
+    filter: drop-shadow(0 12px 24px rgba(0,0,0,0.5));
+
+    cursor: pointer;
+}
+
+.logo:hover {
+    filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.856));
+}
+
+/* -------- START BUTTON -------- */
+.btn-start {
+    position: relative;
+    overflow: hidden;
+
+    width: 100%;
+    padding: 16px;
+
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.25);
+
+    background: linear-gradient(
+        135deg,
+        rgba(108,124,255,0.95),
+        rgba(90,103,216,0.95)
+    );
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    box-shadow:
+        0 4px 10px rgba(108,124,255,0.55),
+        inset 0 1px 0 rgba(255,255,255,0.35);
+
+    cursor: pointer;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.btn-start span {
+    position: relative;
+    z-index: 2;
+
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: white;
+}
+
+/* -------- ANIMATION -------- */
+
+@media (hover: hover) {
+    .btn-start::before {
+        content: "";
+        position: absolute;
+        inset: -50%;
+
+        background: linear-gradient(
+            120deg,
+            transparent 30%,
+            rgba(255,255,255,0.35),
+            transparent 70%
+        );
+
+        transform: translateX(-100%) rotate(25deg);
+        transition: transform 0.6s ease;
+    }
+
+    .btn-start:hover::before {
+        transform: translateX(100%) rotate(25deg);
+    }
+
+    .btn-start:hover {
+        box-shadow:
+            0 8px 20px rgba(108,124,255,0.75),
+            inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+
+    .btn-start:active {
+        transform: scale(0.96);
+        box-shadow:
+            0 8px 18px rgba(108,124,255,0.45),
+            inset 0 2px 6px rgba(0,0,0,0.35);
+    }
+}
+
+/* -------- ANIMATION -------- */
+
+@media (hover: hover) {
+    .btn-start::before {
+        content: "";
+        position: absolute;
+        inset: -50%;
+
+        background: linear-gradient(
+            120deg,
+            transparent 30%,
+            rgba(255,255,255,0.35),
+            transparent 70%
+        );
+
+        transform: translateX(-100%) rotate(25deg);
+        transition: transform 0.6s ease;
+    }
+
+    .btn-start:hover::before {
+        transform: translateX(100%) rotate(25deg);
+    }
+
+    .btn-start:hover {
+        box-shadow:
+            0 8px 20px rgba(108,124,255,0.75),
+            inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+
+    .btn-start:active {
+        transform: scale(0.96);
+        box-shadow:
+            0 8px 18px rgba(108,124,255,0.45),
+            inset 0 2px 6px rgba(0,0,0,0.35);
+    }
+}
+
+@media (hover: none) {
+    .btn-start::before {
+        content: "";
+        position: absolute;
+        inset: -50%;
+
+        background: linear-gradient(
+            120deg,
+            transparent 30%,
+            rgba(255,255,255,0.35),
+            transparent 70%
+        );
+
+        transform: translateX(-100%) rotate(25deg);
+        transition: transform 0.6s ease;
+    }
+
+    .btn-start:hover::before {
+        transform: translateX(100%) rotate(25deg);
+    }
+
+    .btn-start:hover {
+        box-shadow:
+            0 8px 20px rgba(108,124,255,0.75),
+            inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+
+    .btn-start:active {
+        transform: scale(0.89);
+        box-shadow:
+            0 8px 18px rgba(108,124,255,0.45),
+            inset 0 2px 6px rgba(0,0,0,0.35);
+    }
+}
+
