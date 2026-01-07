@@ -26,11 +26,12 @@ app = FastAPI(
     title="🎉 Q&A Party Game API",
     description="""
 Interactive real-time game API where players answer fun questions and vote for the best one!
-Use the REST endpoints for admin tasks and the Socket.IO events for gameplay.
 """,
     version="1.0.0",
     docs_url="/swagger",
     redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    root_path="/api",   # ⭐ THIS IS THE FIX ⭐
 )
 
 app.add_middleware(
