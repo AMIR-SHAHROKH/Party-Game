@@ -76,6 +76,11 @@
         0 2px 12px rgba(0,0,0,0.6);
 }
 
+@media (hover: none) {
+    .panel-title {
+    font-size: 20px;
+    }
+}
 
 /* ======================================================
    LOGO
@@ -277,7 +282,10 @@
 /* =========================
    FORM 
 ========================= */
-#createGameForm {
+#loginForm,
+#signupForm,
+#createGameForm,
+#joinGameForm {
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -473,9 +481,6 @@
     background: rgba(255, 255, 255, 0);
     color: #e5e7eb9a;
 
-    font-size: 18px;
-    font-weight: 700;
-
     display: flex;
     align-items: center;
     justify-content: center;
@@ -490,6 +495,11 @@
         transform 0.15s ease,
         box-shadow 0.15s ease,
         background 0.15s ease;
+}
+
+.btn-back .arrow {
+    font-size: 12px;
+    font-weight: 700;
 }
 
 /* Hover-capable devices */
@@ -519,4 +529,38 @@
 
 .btn-back:active {
     transform: scale(0.9);
+}
+
+/* =========================
+   AUTH PANEL
+========================= */
+.auth-panel {
+    padding-top: 170px;
+}
+
+/* =========================
+   AUTH FOOTER
+========================= */
+.auth-footer {
+    margin-top: 16px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    color: rgba(108,124,255,1);
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0;
+}
+
+.link-btn:hover {
+    text-decoration: underline;
 }

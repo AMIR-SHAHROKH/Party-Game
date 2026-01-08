@@ -1,9 +1,15 @@
 /* ======================================================
-   NAVIGATION (HOME PAGE)
+   HELPER
 ====================================================== */
+function $(id) {
+  return document.getElementById(id);
+}
 
-const startBtn = document.getElementById("startBtn");
-const joinBtn = document.getElementById("joinBtn");
+/* ======================================================
+   HOME PAGE NAVIGATION
+====================================================== */
+const startBtn = $("startBtn");
+const joinBtn = $("joinBtn");
 
 if (startBtn) {
   startBtn.addEventListener("click", () => {
@@ -17,85 +23,121 @@ if (joinBtn) {
   });
 }
 
-
 /* ======================================================
    CREATE GAME PAGE
 ====================================================== */
-
-const createGameForm = document.getElementById("createGameForm");
+const createGameForm = $("createGameForm");
 const roundsCustomSelect = document.querySelector(".custom-select");
 const roundsNativeSelect = document.querySelector(".native-select");
 
-if (createGameForm && roundsCustomSelect) {
-  createGameForm.addEventListener("submit", e => {
+if (createGameForm) {
+  createGameForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    console.log("🟢 Create Game form submitted");
 
-    const hostInput = document.getElementById("hostName");
-    const gameInput = document.getElementById("gameName");
-    const hostError = hostInput.nextElementSibling;
-    const gameError = gameInput.nextElementSibling;
+    const gameInput = $("gameName");
+    const hostInput = $("hostName");
 
-    // ---- Validation
+    const gameError = gameInput?.nextElementSibling;
+    const hostError = hostInput?.nextElementSibling;
+
+    let valid = true;
+
+    // --------------------
+    // GAME NAME VALIDATION
+    // --------------------
     if (!gameInput.value.trim()) {
       gameError.textContent = "Game name is required!";
       gameError.style.display = "block";
-      return;
+      valid = false;
     } else {
       gameError.style.display = "none";
     }
 
+    // --------------------
+    // HOST NAME VALIDATION
+    // --------------------
     if (!hostInput.value.trim()) {
       hostError.textContent = "Your name is required!";
       hostError.style.display = "block";
-      return;
+      valid = false;
     } else {
       hostError.style.display = "none";
     }
 
+    if (!valid) return;
 
-    // ---- Get rounds (desktop vs mobile)
-    let rounds;
-    if (window.matchMedia("(hover: hover)").matches) {
-      rounds = roundsCustomSelect.dataset.value || "5";
+    // --------------------
+    // GET ROUNDS
+    // --------------------
+    let rounds = 5;
+
+    if (window.matchMedia("(hover: hover)").matches && roundsCustomSelect) {
+      rounds = Number(roundsCustomSelect.dataset.value || 5);
     } else if (roundsNativeSelect) {
-      rounds = roundsNativeSelect.value;
+      rounds = Number(roundsNativeSelect.value);
     }
 
-    // ---- Payload
-    const gameData = {
+    // --------------------
+    // PAYLOAD (UPDATED SCHEMA)
+    // --------------------
+    const payload = {
+      // name: gameInput.value.trim(),
       host_name: hostInput.value.trim(),
-      game_name: gameInput.value.trim(),
-      rounds: Number(rounds)
+      rounds: rounds
     };
 
-    // ---- POST to backend
-    fetch("http://192.168.1.38:8000/create_game_games_post", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(gameData)
-    })
-      .then(res => {
-        if (!res.ok) throw new Error("Failed to create game");
-        return res.json();
-      })
-      .then(data => {
-        console.log("Game created:", data);
-        // Example redirect later:
-        // window.location.href = `lobby.html?id=${data.game_id}`;
-      })
-      .catch(err => {
-        console.error("Create game failed:", err);
+    console.log("📦 Sending payload:", payload);
+
+    // --------------------
+    // SEND TO BACKEND
+    // --------------------
+    try {
+      const res = await fetch("http://localhost/games", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
       });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        data = await res.text();
+      }
+
+      if (!res.ok) {
+        console.error("❌ Backend error:", data);
+        alert("Server error. Please try again later.");
+        return;
+      }
+
+
+      if (!res.ok) {
+        console.error("❌ Backend rejected request:", data);
+        return;
+      }
+
+      console.log("✅ Game created successfully:", data);
+
+      // Save IDs
+      sessionStorage.setItem("game_id", data.game_id);
+      sessionStorage.setItem("player_id", data.host_player_id);
+
+      // Redirect later (optional)
+      // window.location.href = `lobby.html?game_id=${data.game_id}`;
+
+    } catch (err) {
+      console.error("🚨 Network error:", err);
+    }
   });
 }
 
-
 /* ======================================================
-   CUSTOM DROPDOWN (CREATE GAME)
+   CUSTOM DROPDOWN
 ====================================================== */
-
 document.querySelectorAll(".custom-select").forEach(select => {
   const trigger = select.querySelector(".select-trigger");
   const valueSpan = select.querySelector(".select-value");
@@ -103,7 +145,6 @@ document.querySelectorAll(".custom-select").forEach(select => {
 
   if (!trigger || !valueSpan) return;
 
-  // Set initial value
   select.dataset.value = valueSpan.textContent;
 
   trigger.addEventListener("click", e => {
@@ -126,13 +167,11 @@ document.addEventListener("click", () => {
   });
 });
 
-
 /* ======================================================
    JOIN GAME PAGE
 ====================================================== */
-
-const usernameInput = document.getElementById("username");
-const joinGameBtn = document.getElementById("joinGameBtn");
+const usernameInput = $("username");
+const joinGameBtn = $("joinGameBtn");
 const gameItems = document.querySelectorAll(".game-item");
 
 let selectedGameId = null;
@@ -157,21 +196,16 @@ if (usernameInput && joinGameBtn) {
   });
 
   joinGameBtn.addEventListener("click", () => {
-    const joinData = {
+    console.log("🎮 Joining game:", {
       username: usernameInput.value.trim(),
       game_id: selectedGameId
-    };
-
-    console.log("Joining game:", joinData);
-
-    // Next step:
-    // fetch("/join_game", { ... })
+    });
   });
 }
 
-// ===============================
-// BACK BUTTON
-// ===============================
+/* ======================================================
+   BACK BUTTON
+====================================================== */
 document.querySelectorAll(".btn-back").forEach(btn => {
   btn.addEventListener("click", () => {
     window.history.back();
