@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Round — Q&A Party</title>
+
+  <link rel="stylesheet" href="style.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="icon" type="image/png" href="Images/Logo.PNG">
+
+  <!-- Socket.IO client -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <div class="app-bg">
+    <div class="panel join-game-panel round-panel">
+
+      <button type="button" class="btn-back" aria-label="Go back">
+        <span class="arrow">←</span>
+      </button>
+
+      <h2 class="panel-title">Round 1</h2>
+
+      <div class="round-info">
+        <div id="roundGameName" class="lobby-game-name">Game</div>
+        <div id="roundGameId" class="lobby-game-id"></div>
+      </div>
+
+      <div class="question-section">
+        <h3>Question</h3>
+        <div id="questionText" class="question-text">Waiting for host to start the round...</div>
+      </div>
+
+      <form id="answerForm" class="answer-form">
+        <label for="answerInput">Your answer</label>
+        <textarea id="answerInput" placeholder="Type your answer..." required></textarea>
+        <button id="submitAnswerBtn" class="btn btn-form" type="submit" disabled>SUBMIT</button>
+        <div id="submitStatus" class="muted"></div>
+      </form>
+
+      <div class="players-section">
+        <h3>Players</h3>
+        <ul id="roundPlayersList" class="players-list"></ul>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

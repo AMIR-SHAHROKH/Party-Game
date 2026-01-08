@@ -248,6 +248,39 @@ async def start_game(
 # - sets game:{game_id}:current_round -> round_id
 # - emits socket event with question text (hide text if you want)
 # -------------------------------------------------
+async def pick_random_question(session: AsyncSession, game_id: int) -> Question:
+    """
+    Pick a random Question that has NOT been used in this game.
+    Uses Redis set `game:{game_id}:used_questions` to track used question ids.
+    If no unused questions remain, raises HTTPException(400).
+    """
+    result = await session.execute(select(Question))
+    questions = result.scalars().all()
+
+    # read used question ids for this game from redis (strings)
+    used_ids = set()
+    if redis_client:
+        used_strs = await redis_client.smembers(f"game:{game_id}:used_questions")
+        if used_strs:
+            # convert to ints if possible (guard against empty values)
+            try:
+                used_ids = set(int(x) for x in used_strs)
+            except Exception:
+                used_ids = set()
+
+    # filter out used questions
+    candidates = [q for q in questions if q.id not in used_ids]
+
+    if not candidates:
+        # no unused questions left for this game
+        raise HTTPException(status_code=400, detail="No unused questions left for this game")
+
+    return random.choice(candidates)
+
+
+# -------------------------------------------------
+# Endpoint: start round (UPDATED)
+# -------------------------------------------------
 @app.post("/games/{game_id}/start_round")
 async def start_round(
     game_id: int,
@@ -266,16 +299,43 @@ async def start_round(
     await session.commit()
     await session.refresh(rnd)
 
-    # pick random question and store mapping in redis
-    q = await pick_random_question(session)
+    # atomically increment the round counter for this game in Redis to get the round number
+    # (guarantees sequential round numbers even under concurrency)
+    round_num = 1
+    if redis_client:
+        round_num = await redis_client.incr(f"game:{game_id}:round_counter")
+
+    # pick a question that hasn't been used in this game yet
+    q = await pick_random_question(session, game_id)
+
+    # persist mappings in redis
+    # - round:{round_id}:question_id -> question id
+    # - round:{round_id}:revealed -> "0"
+    # - game:{game_id}:current_round -> round_id
+    # - game:{game_id}:used_questions (set) add this question id
     await redis_client.set(f"round:{rnd.id}:question_id", q.id)
     await redis_client.set(f"round:{rnd.id}:revealed", "0")
     await redis_client.set(f"game:{game_id}:current_round", str(rnd.id))
+    await redis_client.sadd(f"game:{game_id}:used_questions", str(q.id))
 
-    # emit the new round (question may be sent to host only — here we emit question text to all for simplicity)
-    await sio.emit("round_started", {"game_id": game_id, "round_id": rnd.id, "question": {"id": q.id, "text": q.text}}, room=f"game_{game_id}")
+    # emit the new round (include round number and question text in payload)
+    await sio.emit(
+        "round_started",
+        {
+            "game_id": game_id,
+            "round_id": rnd.id,
+            "round_number": round_num,
+            "question": {"id": q.id, "text": q.text},
+        },
+        room=f"game_{game_id}",
+    )
 
-    return {"round_id": rnd.id, "question_id": q.id}
+    # return the round id, round number, question id and question text
+    return {
+        "round_number": round_num,
+        "question_id": q.id,
+        "question": q.text,
+    }
 
 # -------------------------------------------------
 # Endpoint: submit answer for a round
