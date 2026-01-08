@@ -31,7 +31,7 @@ Interactive real-time game API where players answer fun questions and vote for t
     docs_url="/swagger",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    root_path="/api",   # ⭐ THIS IS THE FIX ⭐
+    root_path="/api",   
 )
 
 app.add_middleware(
