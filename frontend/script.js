@@ -79,10 +79,10 @@ if (createGameForm) {
     }
 
     // --------------------
-    // PAYLOAD (UPDATED SCHEMA)
+    // PAYLOAD
     // --------------------
     const payload = {
-      // name: gameInput.value.trim(),
+      name: gameInput.value.trim(),
       host_name: hostInput.value.trim(),
       rounds: rounds
     };
@@ -93,7 +93,7 @@ if (createGameForm) {
     // SEND TO BACKEND
     // --------------------
     try {
-      const res = await fetch("http://localhost/games", {
+      const res = await fetch("http://localhost/api/games", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -101,36 +101,40 @@ if (createGameForm) {
         body: JSON.stringify(payload)
       });
 
+      // Read body ONCE
+      const text = await res.text();
       let data;
+
       try {
-        data = await res.json();
+        data = text ? JSON.parse(text) : null;
       } catch {
-        data = await res.text();
+        data = text;
       }
 
       if (!res.ok) {
         console.error("❌ Backend error:", data);
-        alert("Server error. Please try again later.");
-        return;
-      }
-
-
-      if (!res.ok) {
-        console.error("❌ Backend rejected request:", data);
+        alert(
+          "Server error. Please try again later.\n" +
+          (typeof data === "string" ? data : JSON.stringify(data))
+        );
         return;
       }
 
       console.log("✅ Game created successfully:", data);
 
-      // Save IDs
-      sessionStorage.setItem("game_id", data.game_id);
-      sessionStorage.setItem("player_id", data.host_player_id);
+      if (data?.game_id && data?.host_player_id) {
+        sessionStorage.setItem("game_id", data.game_id);
+        sessionStorage.setItem("player_id", data.host_player_id);
+      } else {
+        console.warn("⚠️ Unexpected response format:", data);
+      }
 
-      // Redirect later (optional)
+      // Optional redirect
       // window.location.href = `lobby.html?game_id=${data.game_id}`;
 
     } catch (err) {
       console.error("🚨 Network error:", err);
+      alert("Network error. Is the backend running?");
     }
   });
 }
