@@ -61,6 +61,7 @@ class ImportQuestionsPayload(BaseModel):
     questions: List[str]
 
 class CreateGamePayload(BaseModel):
+    name: str
     host_name: str = "Host"
     rounds: int = 10
 
@@ -142,32 +143,43 @@ async def create_game(
     payload: CreateGamePayload,
     session: AsyncSession = Depends(get_async_session)
 ):
-    g = Game(rounds=payload.rounds)
+    g = Game(
+        name=payload.name,
+        rounds=payload.rounds
+    )
     session.add(g)
     await session.commit()
     await session.refresh(g)
 
-    p = Player(name=payload.host_name, game_id=g.id, ready=False)
+    p = Player(name=payload.host_name, game_id=g.id)
     session.add(p)
     await session.commit()
     await session.refresh(p)
 
-    # set host
     g.host_player_id = p.id
     session.add(g)
     await session.commit()
-    # set initial runtime state in redis (no round yet)
-    await redis_client.delete(f"game:{g.id}:current_round")
-    return {"game_id": g.id, "host_player_id": p.id}
+
+    return {
+        "game_id": g.id,
+        "name": g.name,
+        "host_player_id": p.id,
+    }
+
 
 @app.get("/games")
 async def list_games(session: AsyncSession = Depends(get_async_session)):
     result = await session.execute(select(Game))
     games = result.scalars().all()
     return [
-        {"id": g.id, "created_at": g.created_at.isoformat() if g.created_at else None}
+        {
+            "id": g.id,
+            "name": g.name,
+            "created_at": g.created_at.isoformat() if g.created_at else None
+        }
         for g in games
     ]
+
 
 @app.get("/games/{game_id}")
 async def get_game(game_id: int, session: AsyncSession = Depends(get_async_session)):
